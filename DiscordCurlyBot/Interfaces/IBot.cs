@@ -9,7 +9,7 @@ namespace DiscordCurlyBot.Interfaces
 {
     internal interface IBot
     {
-        Task StartAsync(ServiceProvider serviceProvider);
+        Task StartAsync();
 
         Task StopASync();
     }
