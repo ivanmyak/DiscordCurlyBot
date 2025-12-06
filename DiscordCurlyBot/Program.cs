@@ -18,6 +18,18 @@ internal class Program
             .AddEnvironmentVariables()
             .Build();
 
+        // Конфиг клиента с нужными intent'ами
+        var socketConfig = new DiscordSocketConfig
+        {
+            GatewayIntents = GatewayIntents.Guilds |
+                             GatewayIntents.GuildMembers |
+                             GatewayIntents.GuildVoiceStates |
+                             GatewayIntents.GuildPresences
+        };
+
+        // Создаём клиент один раз
+        var client = new DiscordSocketClient(socketConfig);
+
         var serviceProvider = new ServiceCollection()
             .AddLogging(options =>
             {
@@ -25,26 +37,27 @@ internal class Program
                 options.AddConsole();
             })
             .AddSingleton<IConfiguration>(configuration)
-            .AddSingleton<DiscordSocketClient>()
-            .AddSingleton(x =>
-            {
-                var client = x.GetRequiredService<DiscordSocketClient>();
-                return new InteractionService(client);
-            })
-            .AddSingleton<MoveUserManager>()
+            .AddSingleton(client) // регистрируем именно этот экземпляр
+            .AddSingleton(x => new InteractionService(client))
+            .AddSingleton<MoveUserManager>() // сервис перемещений
             .BuildServiceProvider();
 
+        // Инициализация MoveUserManager (подписка на PresenceUpdated)
         serviceProvider.GetRequiredService<MoveUserManager>();
 
         try
         {
-            var client = serviceProvider.GetRequiredService<DiscordSocketClient>();
             var interactions = serviceProvider.GetRequiredService<InteractionService>();
 
-            client.Log += msg => { Console.WriteLine(msg.ToString()); return Task.CompletedTask; };
+            client.Log += msg =>
+            {
+                Console.WriteLine(msg.ToString());
+                return Task.CompletedTask;
+            };
 
             client.Ready += async () =>
             {
+                // Регистрируем все модули команд
                 await interactions.AddModulesAsync(Assembly.GetEntryAssembly(), serviceProvider);
                 await interactions.RegisterCommandsGloballyAsync();
                 Console.WriteLine("Slash-команды зарегистрированы!");
@@ -63,7 +76,7 @@ internal class Program
             await client.LoginAsync(TokenType.Bot, token);
             await client.StartAsync();
 
-            await Task.Delay(-1);
+            await Task.Delay(-1); // держим процесс живым
         }
         catch (Exception ex)
         {

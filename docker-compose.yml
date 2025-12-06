@@ -1,0 +1,9 @@
+services:
+  discordcurlybot:
+    container_name: dockercurlybotcontainer
+    image: ${DOCKER_REGISTRY-}discordcurlybot
+    build:
+      context: .
+      dockerfile: DiscordCurlyBot/Dockerfile
+    env_file: "env.env"
+    restart: unless-stopped

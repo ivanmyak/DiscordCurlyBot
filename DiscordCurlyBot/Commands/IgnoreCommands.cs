@@ -22,6 +22,7 @@ public class IgnoreCommands : InteractionModuleBase<SocketInteractionContext>
     }
 
     [SlashCommand("listignored", "Выводит список всех пользователей, отключивших авто-перемещения.")]
+    [RequireUserPermission(GuildPermission.Administrator)]
     public async Task ListIgnoredAsync()
     {
         var ignored = IgnoreManager.GetIgnoredUsers().ToList();

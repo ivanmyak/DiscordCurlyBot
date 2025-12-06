@@ -17,34 +17,53 @@ namespace DiscordCurlyBot.Services
 
         private async Task OnPresenceUpdatedAsync(SocketUser user, SocketPresence before, SocketPresence after)
         {
+            if (user is not SocketGuildUser guildUser) return;
+            if (guildUser.VoiceChannel == null) return; // не в голосовом канале
+            if (IgnoreManager.IsIgnored(guildUser.Id)) return; // отключил отслеживание
+
+            var activity = after.Activities.FirstOrDefault();
+            var beforeActivity = before?.Activities.FirstOrDefault();
+
+            var guild = guildUser.Guild;
+            var huntChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Охота", StringComparison.OrdinalIgnoreCase));
+            var otherGamesChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Иные игрульки", StringComparison.OrdinalIgnoreCase));
+            var idleChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Житьё-Бытьё", StringComparison.OrdinalIgnoreCase));
+
+            // Логика перемещений
+            if (guildUser.VoiceChannel == idleChannel && activity != null)
+            {
+                if (activity.Type == ActivityType.Playing && activity.Name == "Hunt: Showdown")
+                    await MoveUserAsync(guildUser, huntChannel, $"Вы запустили {activity.Name}, поэтому были перемещены в {huntChannel.Name}.");
+                else if (activity.Type == ActivityType.Playing)
+                    await MoveUserAsync(guildUser, otherGamesChannel, $"Вы запустили {activity.Name}, поэтому были перемещены в {otherGamesChannel.Name}.");
+            }
+            else if (guildUser.VoiceChannel == otherGamesChannel && activity?.Name == "Hunt: Showdown")
+            {
+                await MoveUserAsync(guildUser, huntChannel, $"Вы запустили {activity.Name}, поэтому были перемещены в {huntChannel.Name}.");
+            }
+            else if (guildUser.VoiceChannel == huntChannel && activity == null && beforeActivity != null)
+            {
+                await MoveUserAsync(guildUser, idleChannel, $"Вы завершили {beforeActivity.Name}, поэтому были перемещены в {idleChannel.Name}.");
+            }
+        }
+
+        private async Task MoveUserAsync(SocketGuildUser user, SocketVoiceChannel targetChannel, string message)
+        {
+            if (targetChannel == null || user.VoiceChannel == targetChannel) return;
+
+            await user.ModifyAsync(x => x.Channel = targetChannel);
+
+            // Отправляем уведомление в личку
             try
             {
-                if (user is not SocketGuildUser guildUser) return;
-
-                // Игнорируем, если пользователь отключил авто-перемещения
-                if (IgnoreManager.IsIgnored(guildUser.Id)) return;
-
-                var activity = after.Activities.FirstOrDefault();
-                if (activity == null) return;
-
-                // Пример: игра Hunt: Showdown → канал "Hunt"
-                if (activity.Type == ActivityType.Playing && activity.Name == "Hunt: Showdown")
-                {
-                    var huntChannel = guildUser.Guild.VoiceChannels
-                        .FirstOrDefault(c => c.Name.Equals("Hunt", StringComparison.OrdinalIgnoreCase));
-
-                    if (huntChannel != null && guildUser.VoiceChannel != huntChannel)
-                    {
-                        await guildUser.ModifyAsync(x => x.Channel = huntChannel);
-                        Console.WriteLine($"{guildUser.Username} перемещён в {huntChannel.Name}");
-                    }
-                }
-
-                // Здесь можно добавить другие правила для разных игр/активностей
+                await user.SendMessageAsync(message + "\nДля отключения авто-перемещений используйте команду `/ignore`.");
             }
-            catch (Exception ex)
+            catch
             {
-                Console.WriteLine($"Ошибка в MoveUserManager: {ex.Message}");
+                // Если личка закрыта, пишем в главный текстовый канал
+                var mainChannel = user.Guild.TextChannels.FirstOrDefault(c => c.Name.Equals("основная-основа-основ", StringComparison.OrdinalIgnoreCase));
+                if (mainChannel != null)
+                    await mainChannel.SendMessageAsync($"{user.Mention}: {message}\nДля отключения авто-перемещений используйте команду `/ignore`.");
             }
         }
     }
