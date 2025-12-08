@@ -15,37 +15,64 @@ namespace DiscordCurlyBot.Services
             _client.PresenceUpdated += OnPresenceUpdatedAsync;
         }
 
+        /// <summary>
+        /// Обработчик изменения присутствия пользователя.
+        /// Отслеживает начало и окончание игровых активностей и перемещает пользователя между каналами.
+        /// </summary>
         private async Task OnPresenceUpdatedAsync(SocketUser user, SocketPresence before, SocketPresence after)
         {
             if (user is not SocketGuildUser guildUser) return;
-            if (guildUser.VoiceChannel == null) return; // не в голосовом канале
-            if (IgnoreManager.IsIgnored(guildUser.Id)) return; // отключил отслеживание
+            if (guildUser.VoiceChannel == null || IgnoreManager.IsIgnored(guildUser.Id)) return;
+            // не в голосовом канале или отключил отслеживание
 
-            var activity = after.Activities.FirstOrDefault();
-            var beforeActivity = before?.Activities.FirstOrDefault();
+            var currentActivity = after?.Activities.FirstOrDefault();
+            var previousActivity = before?.Activities.FirstOrDefault();
 
             var guild = guildUser.Guild;
             var huntChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Охота", StringComparison.OrdinalIgnoreCase));
             var otherGamesChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Иные игрульки", StringComparison.OrdinalIgnoreCase));
             var idleChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Житьё-Бытьё", StringComparison.OrdinalIgnoreCase));
 
-            // Логика перемещений
-            if (guildUser.VoiceChannel == idleChannel && activity != null)
+            // --- Логика перемещений ---
+
+            // 1. Пользователь сидит в "Житьё-Бытьё" и запускает игру
+            if (guildUser.VoiceChannel == idleChannel && currentActivity != null && currentActivity.Type == ActivityType.Playing)
             {
-                if (activity.Type == ActivityType.Playing && activity.Name == "Hunt: Showdown")
-                    await MoveUserAsync(guildUser, huntChannel, $"Вы запустили {activity.Name}, поэтому были перемещены в {huntChannel.Name}.");
-                else if (activity.Type == ActivityType.Playing)
-                    await MoveUserAsync(guildUser, otherGamesChannel, $"Вы запустили {activity.Name}, поэтому были перемещены в {otherGamesChannel.Name}.");
+                if (string.Equals(currentActivity.Name, "Hunt: Showdown", StringComparison.OrdinalIgnoreCase))
+                {
+                    await MoveUserAsync(guildUser, huntChannel,
+                        $"Вы запустили {currentActivity.Name}, поэтому были перемещены в {huntChannel?.Name}.");
+                }
+                else
+                {
+                    await MoveUserAsync(guildUser, otherGamesChannel,
+                        $"Вы запустили {currentActivity.Name}, поэтому были перемещены в {otherGamesChannel?.Name}.");
+                }
             }
-            else if (guildUser.VoiceChannel == otherGamesChannel && activity?.Name == "Hunt: Showdown")
+
+            // 2. Пользователь сидит в "Иные игрульки" и запускает Hunt: Showdown
+            else if (guildUser.VoiceChannel == otherGamesChannel &&
+                     string.Equals(currentActivity?.Name, "Hunt: Showdown", StringComparison.OrdinalIgnoreCase))
             {
-                await MoveUserAsync(guildUser, huntChannel, $"Вы запустили {activity.Name}, поэтому были перемещены в {huntChannel.Name}.");
+                await MoveUserAsync(guildUser, huntChannel,
+                    $"Вы запустили {currentActivity.Name}, поэтому были перемещены в {huntChannel?.Name}.");
             }
-            else if (guildUser.VoiceChannel == huntChannel && activity == null && beforeActivity != null)
+
+            // 3. Пользователь сидит в "Иные игрульки" и завершает игру
+            else if (guildUser.VoiceChannel == otherGamesChannel && currentActivity == null && previousActivity != null)
             {
-                await MoveUserAsync(guildUser, idleChannel, $"Вы завершили {beforeActivity.Name}, поэтому были перемещены в {idleChannel.Name}.");
+                await MoveUserAsync(guildUser, idleChannel,
+                    $"Вы завершили {previousActivity.Name}, поэтому были перемещены в {idleChannel?.Name}.");
+            }
+
+            // 4. Пользователь сидит в "Охота" и завершает игру
+            else if (guildUser.VoiceChannel == huntChannel && currentActivity == null && previousActivity != null)
+            {
+                await MoveUserAsync(guildUser, idleChannel,
+                    $"Вы завершили {previousActivity.Name}, поэтому были перемещены в {idleChannel?.Name}.");
             }
         }
+
 
         private async Task MoveUserAsync(SocketGuildUser user, SocketVoiceChannel targetChannel, string message)
         {

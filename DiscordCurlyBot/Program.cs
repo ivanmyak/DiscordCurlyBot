@@ -34,16 +34,24 @@ internal class Program
             .AddLogging(options =>
             {
                 options.ClearProviders();
-                options.AddConsole();
+                options.AddSimpleConsole(opt =>
+                 {
+                     opt.UseUtcTimestamp = true;
+                     opt.IncludeScopes = false;
+                     opt.SingleLine = true;
+                     opt.TimestampFormat = "HH:mm:ss"; // формат времени
+                 });
             })
             .AddSingleton<IConfiguration>(configuration)
             .AddSingleton(client) // регистрируем именно этот экземпляр
             .AddSingleton(x => new InteractionService(client))
             .AddSingleton<MoveUserManager>() // сервис перемещений
+            .AddSingleton<LoggingService>() // сервис логирования
             .BuildServiceProvider();
 
         // Инициализация MoveUserManager (подписка на PresenceUpdated)
         serviceProvider.GetRequiredService<MoveUserManager>();
+        serviceProvider.GetRequiredService<LoggingService>();
 
         try
         {

@@ -1,9 +1,20 @@
+name: curlybot-compose-dev
 services:
   discordcurlybot:
-    container_name: dockercurlybotcontainer
-    image: ${DOCKER_REGISTRY-}discordcurlybot
+    container_name: curlybot-container-dev
+    image: ${DOCKER_REGISTRY-}curlybot-image-dev
     build:
       context: .
       dockerfile: DiscordCurlyBot/Dockerfile
     env_file: "env.env"
     restart: unless-stopped
+    environment:
+      - TZ=Europe/Minsk
+    volumes:
+      - curlybot-data:/app/Data
+
+volumes:
+  curlybot-data:
+  # Изначально, перед запуском данного файла, необходимо создать этот самый volume (compose-curlybot-data-dev)
+    external: 
+        name: compose-curlybot-data-dev
