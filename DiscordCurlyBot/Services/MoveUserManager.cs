@@ -25,13 +25,13 @@ namespace DiscordCurlyBot.Services
             if (guildUser.VoiceChannel == null || IgnoreManager.IsIgnored(guildUser.Id)) return;
             // не в голосовом канале или отключил отслеживание
 
-            var currentActivity = after?.Activities.FirstOrDefault();
+            IActivity currentActivity = after?.Activities.First() ?? throw new Exception("Не удалось распознать текущую активность");
             var previousActivity = before?.Activities.FirstOrDefault();
 
             var guild = guildUser.Guild;
-            var huntChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Охота", StringComparison.OrdinalIgnoreCase));
-            var otherGamesChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Иные игрульки", StringComparison.OrdinalIgnoreCase));
-            var idleChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Житьё-Бытьё", StringComparison.OrdinalIgnoreCase));
+            var huntChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Охота", StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Не найден голосовой канал 'Охота'");
+            var otherGamesChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Иные игрульки", StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Не найден голосовой канал 'Иные игрульки'");
+            var idleChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Житьё-Бытьё", StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Не найден голосовой канал 'Житьё-Бытьё'");
 
             // --- Логика перемещений ---
 
@@ -55,7 +55,7 @@ namespace DiscordCurlyBot.Services
                      string.Equals(currentActivity?.Name, "Hunt: Showdown", StringComparison.OrdinalIgnoreCase))
             {
                 await MoveUserAsync(guildUser, huntChannel,
-                    $"Вы запустили {currentActivity.Name}, поэтому были перемещены в {huntChannel?.Name}.");
+                    $"Вы запустили {currentActivity?.Name ?? "Не распознали"}, поэтому были перемещены в {huntChannel?.Name}.");
             }
 
             // 3. Пользователь сидит в "Иные игрульки" и завершает игру
@@ -69,7 +69,7 @@ namespace DiscordCurlyBot.Services
             else if (guildUser.VoiceChannel == huntChannel && currentActivity == null && previousActivity != null)
             {
                 await MoveUserAsync(guildUser, idleChannel,
-                    $"Вы завершили {previousActivity.Name}, поэтому были перемещены в {idleChannel?.Name}.");
+                    $"Вы завершили {previousActivity.Name}, поэтому будете перемещены в {idleChannel?.Name}");
             }
         }
 
