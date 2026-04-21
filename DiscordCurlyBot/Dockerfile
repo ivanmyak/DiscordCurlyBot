@@ -14,6 +14,8 @@ WORKDIR "/src/DiscordCurlyBot"
 RUN dotnet build "./DiscordCurlyBot.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # Этот этап используется для публикации проекта службы, который будет скопирован на последний этап
+# Ставим необходимые либы для работы с аудио-потоками
+RUN apt-get update && apt-get install -y ffmpeg libopus-dev libsodium-dev && rm -rf /var/lib/apt/lists/*
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./DiscordCurlyBot.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
