@@ -1,6 +1,6 @@
 name: curlybot-compose-dev
 services:
-  discordcurlybot:
+  discordcurlybot-dev:
     container_name: curlybot-container-dev
     image: ${DOCKER_REGISTRY-}curlybot-image-dev
     build:
@@ -9,20 +9,19 @@ services:
     env_file: "env.env"
     restart: unless-stopped
     environment:
-      - TZ=Europe/Minsk
-      - TTS_ENDPOINT=http://ttscurlybot:5000  # Имя сервиса 'ttscurlybot' доступно внутри сети докера
+      - TTS_ENDPOINT=http://ttscurlybot-dev:5000  # Имя сервиса 'ttscurlybot' доступно внутри сети докера
     volumes:
       - curlybot-data:/app/Data
     depends_on:
-      - ttscurlybot
+      - ttscurlybot-dev
 
-  ttscurlybot:
+  ttscurlybot-dev:
     image: rhasspy/wyoming-piper:2.2.2 # Или образ с Silero
     container_name: ttscurlybot-container-dev
-#    command: --voice ru_RU-denis-medium # Выбираешь русский голос
-    command: --model /app/models/ru_RU-denis-medium.onnx
+#    command: --voice ru_RU-denis-medium 
+    command: ["--voice", "/app/models/ru_RU-denis-medium.onnx"] 
     volumes:
-      - ./models:/app/models/tts-models # Папка с .onnx моделями на хосте
+      - ./models/tts-models:/app/models  # Папка с .onnx моделями на хосте
     ports:
       - "5000:5000"
 
@@ -30,4 +29,4 @@ volumes:
   curlybot-data:
   # Изначально, перед запуском данного файла, необходимо создать этот самый volume (compose-curlybot-data-dev)
     external: 
-        name: compose-curlybot-data-dev
+        name: compose-curlybot-data
