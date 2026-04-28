@@ -1,6 +1,7 @@
 ﻿using Discord;
 using DiscordCurlyBot.Interfaces;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
@@ -14,6 +15,7 @@ namespace DiscordCurlyBot.Services
     internal class VoiceQueueService : IVoiceQueue
     {
         private readonly IVoice _voiceService;
+        private readonly ILogger<VoiceQueueService> _logger;
         private readonly ITranslate _translator;
         private readonly ConcurrentDictionary<ulong, (List<string> Names, CancellationTokenSource CTS)> _queues = new();
 
@@ -22,11 +24,12 @@ namespace DiscordCurlyBot.Services
         private bool _isSpeaking = false;
         private readonly int _debounceMs;
 
-        public VoiceQueueService(IVoice voiceService, ITranslate translator, IConfiguration config)
+        public VoiceQueueService(IVoice voiceService, ITranslate translator, IConfiguration config, ILogger<VoiceQueueService> logger)
         {
+            _logger = logger;
             _voiceService = voiceService;
             _translator = translator;
-            _debounceMs = config.GetValue("VoiceSettings:DebounceDelayMilliseconds", 3000);
+            _debounceMs = config.GetValue("VoiceSettings:DebounceDelayMilliseconds", 1000);
         }
 
         public async Task EnqueueJoinAsync(IVoiceChannel channel, string userName, string activity)
@@ -64,14 +67,30 @@ namespace DiscordCurlyBot.Services
 
         private async Task<string> FormatUserAsync(string name, string act)
         {
-            var ruAct = await _translator.GetRussianActivityAsync(act);
-            return string.IsNullOrEmpty(ruAct) ? name : $"{name} (играет в {ruAct})";
+            if (string.IsNullOrEmpty(act))
+            {
+                _logger.LogInformation("[TRANSL] итоговая строка для озвучки:{0}", name);
+                return name;
+            }
+            else
+            {
+
+                var ruAct = await _translator.GetRussianActivityAsync(act);
+                // Senior tip: формируем красивую фразу для озвучки
+                _logger.LogInformation("[TRANSL] Изменённая строка для озвучки:{0}, который сейчас играет в {1}\t исходная активность: {3}", name, ruAct, act);
+
+                return $"{name}, который сейчас играет в {ruAct}";
+            }
         }
 
         private async Task ProcessQueueAsync(IVoiceChannel channel, (List<string> Names, CancellationTokenSource CTS) entry)
         {
             string[] names;
-            lock (entry.Names) { names = entry.Names.ToArray(); entry.Names.Clear(); }
+            lock (entry.Names)
+            {
+                names = entry.Names.ToArray();
+                entry.Names.Clear();
+            }
             if (names.Length == 0) return;
 
             string text = names.Length > 1

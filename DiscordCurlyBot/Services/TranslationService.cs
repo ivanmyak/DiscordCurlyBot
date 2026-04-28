@@ -2,6 +2,7 @@
 using GTranslate.Translators;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
@@ -19,9 +20,12 @@ namespace DiscordCurlyBot.Services
         private Dictionary<string, string> _cache = new();
        // Попробую Яндекс
         private readonly YandexTranslator _translator = new();
+        private readonly ILogger<TranslationService> _logger;
 
-        public TranslationService(IHostEnvironment env)
+
+        public TranslationService(IHostEnvironment env, ILogger<TranslationService> logger)
         {
+            _logger = logger;
             var dataFolder = Path.Combine(env.ContentRootPath, "Data");
             _filePath = Path.Combine(dataFolder, "activity_mapping.json");
 

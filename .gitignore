@@ -365,3 +365,4 @@ FodyWeavers.xsd
 /docker-compose.deploy.yml
 /DiscordCurlyBot/Data/tracking.json
 /DiscordCurlyBot/appsettings.Development.json
+/DiscordCurlyBot/Data/tts-records

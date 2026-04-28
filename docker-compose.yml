@@ -11,22 +11,16 @@ services:
     environment:
       - TTS_ENDPOINT=http://ttscurlybot-dev:5000  # Имя сервиса 'ttscurlybot' доступно внутри сети докера
     volumes:
-      - curlybot-data:/app/Data
+      - ./DiscordCurlyBot/Data:/app/Data
     depends_on:
       - ttscurlybot-dev
 
   ttscurlybot-dev:
-    image: rhasspy/wyoming-piper:2.2.2 # Или образ с Silero
+    image: artibex/piper-http # Образ с озвучиванием
     container_name: ttscurlybot-container-dev
 #    command: --voice ru_RU-denis-medium 
-    command: ["--voice", "/app/models/ru_RU-denis-medium.onnx"] 
+#    command: ["--voice", "/app/models/ru_RU-denis-medium.onnx"] 
     volumes:
       - ./models/tts-models:/app/models  # Папка с .onnx моделями на хосте
     ports:
       - "5000:5000"
-
-volumes:
-  curlybot-data:
-  # Изначально, перед запуском данного файла, необходимо создать этот самый volume (compose-curlybot-data-dev)
-    external: 
-        name: compose-curlybot-data

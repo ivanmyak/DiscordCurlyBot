@@ -25,12 +25,19 @@ namespace DiscordCurlyBot.Services
             if (guildUser.VoiceChannel == null || IgnoreManager.IsIgnored(guildUser.Id)) return;
             // не в голосовом канале или отключил отслеживание
 
-            IActivity currentActivity = after?.Activities.First() ?? throw new Exception("Не удалось распознать текущую активность");
+            IActivity currentActivity = after?.Activities.FirstOrDefault();
+            if (currentActivity == null)
+                return;
+
+
             var previousActivity = before?.Activities.FirstOrDefault();
 
             var guild = guildUser.Guild;
+            // канал "Охота"
             var huntChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Охота", StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Не найден голосовой канал 'Охота'");
+            // канал "Иные игрульки"
             var otherGamesChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Иные игрульки", StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Не найден голосовой канал 'Иные игрульки'");
+            // канал "Житьё-Бытьё"
             var idleChannel = guild.VoiceChannels.FirstOrDefault(c => c.Name.Equals("Житьё-Бытьё", StringComparison.OrdinalIgnoreCase)) ?? throw new Exception("Не найден голосовой канал 'Житьё-Бытьё'");
 
             // --- Логика перемещений ---
