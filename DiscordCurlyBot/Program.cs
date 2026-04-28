@@ -22,14 +22,9 @@ internal class Program
         {
             try
             {
-                // 1. Проверяем папку запуска
                 string path = Path.Combine(AppContext.BaseDirectory, lib);
-
-                // 2. Если не нашли, проверяем вложенную папку libs (как сейчас создалось в VS)
                 if (!File.Exists(path))
                     path = Path.Combine(AppContext.BaseDirectory, "libs", lib);
-
-                // 3. Для продакшена в Docker (без VS) проверяем корень /app
                 if (!File.Exists(path))
                     path = Path.Combine("/app", lib);
 
@@ -43,8 +38,6 @@ internal class Program
             }
         }
 
-        // Используем Host — это стандарт .NET 6/7/8+
-        // Он под капотом настроит IConfiguration, ILogging и IHostEnvironment
         using IHost host = Host.CreateDefaultBuilder(args)
             .ConfigureAppConfiguration((context, config) =>
             {
@@ -54,30 +47,26 @@ internal class Program
             })
             .ConfigureServices((context, services) =>
             {
-                // Конфигурация Discord Client
                 var socketConfig = new DiscordSocketConfig
                 {
                     EnableVoiceDaveEncryption = true,
-
                     GatewayIntents = GatewayIntents.Guilds |
                                      GatewayIntents.GuildMembers |
                                      GatewayIntents.GuildVoiceStates |
                                      GatewayIntents.GuildPresences
                 };
 
-                // Регистрация сервисов
                 services.AddSingleton(socketConfig);
                 services.AddSingleton<DiscordSocketClient>();
                 services.AddSingleton(x => new InteractionService(x.GetRequiredService<DiscordSocketClient>()));
 
-                // Перемещение и Логи
                 services.AddSingleton<MoveUserManager>();
                 services.AddSingleton<LoggingService>();
 
-                // Озвучка, Перевод, Очередь озвучки
-                services.AddHttpClient<IVoice, VoiceService>();
+                services.AddHttpClient<ITTSGenerator, TTSGeneratorService>();
                 services.AddSingleton<ITranslate, TranslationService>();
                 services.AddSingleton<IVoiceQueue, VoiceQueueService>();
+                services.AddSingleton<IVoiceTemplate, VoiceTemplateService>();
             })
             .Build();
 
@@ -86,18 +75,13 @@ internal class Program
 
     private static async Task RunBotAsync(IHost host)
     {
-        // Принудительно включаем поддержку нового протокола
-        // Убедимся, что путь к папке бота стоит ПЕРВЫМ в списке поиска библиотек
         var currentLdPath = Environment.GetEnvironmentVariable("LD_LIBRARY_PATH") ?? "";
         Environment.SetEnvironmentVariable("LD_LIBRARY_PATH", $"/app:{currentLdPath}");
-
 
         var client = host.Services.GetRequiredService<DiscordSocketClient>();
         var interactions = host.Services.GetRequiredService<InteractionService>();
         var config = host.Services.GetRequiredService<IConfiguration>();
-        var voiceQueue = host.Services.GetRequiredService<IVoiceQueue>();
 
-        // 1. АКТИВАЦИЯ СЕРВИСОВ
         host.Services.GetRequiredService<MoveUserManager>();
         host.Services.GetRequiredService<LoggingService>();
 
@@ -107,61 +91,9 @@ internal class Program
             {
                 Console.WriteLine("КРИТИЧЕСКАЯ ОШИБКА: Discord требует шифрование DAVE. Проверь наличие libdave.so в /usr/lib/");
             }
+            Console.WriteLine(msg.ToString());
             return Task.CompletedTask;
         };
-
-        // 2. СОБЫТИЕ: Вход или Перемещение
-        // Для UserVoiceStateUpdated:
-        client.UserVoiceStateUpdated += (user, oldState, newState) =>
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    if (user.IsBot) return;
-
-                    if (newState.VoiceChannel != null && oldState.VoiceChannel?.Id != newState.VoiceChannel.Id)
-                    {
-                        var gUser = user as SocketGuildUser;
-                        // Формируем фразу прямо тут
-                        string text = $"Приветствуем {gUser?.Nickname ?? user.Username}";
-
-                        // Отправляем в нашу умную очередь
-                        await voiceQueue.EnqueueJoinAsync(newState.VoiceChannel, gUser?.Nickname ?? user.Username, "");
-                    }
-                }
-                catch (Exception ex) { Console.WriteLine($"Voice Error: {ex.Message}"); }
-            });
-            return Task.CompletedTask;
-        };
-
-        // 3. СОБЫТИЕ: Изменение активности
-        client.PresenceUpdated += (user, oldPresence, newPresence) =>
-        {
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    if (user is not SocketGuildUser gUser || gUser.IsBot) return;
-
-                    if (gUser.VoiceChannel != null)
-                    {
-                        var oldGame = oldPresence?.Activities.FirstOrDefault(a => a.Type == ActivityType.Playing)?.Name;
-                        var newGame = newPresence?.Activities.FirstOrDefault(a => a.Type == ActivityType.Playing)?.Name;
-
-                        if (!string.IsNullOrEmpty(newGame) && oldGame != newGame)
-                        {
-                            await voiceQueue.EnqueueJoinAsync(gUser.VoiceChannel, gUser.Nickname ?? gUser.Username, newGame);
-                        }
-                    }
-                }
-                catch (Exception ex) { Console.WriteLine($"Presence Error: {ex.Message}"); }
-            });
-            return Task.CompletedTask;
-        };
-
-        // --- Остальной код без изменений ---
-        client.Log += msg => { Console.WriteLine(msg); return Task.CompletedTask; };
 
         client.Ready += async () =>
         {

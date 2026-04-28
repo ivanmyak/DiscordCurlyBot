@@ -13,15 +13,12 @@ using System.Threading.Tasks;
 
 namespace DiscordCurlyBot.Services
 {
-    internal class TranslationService: ITranslate
+    internal class TranslationService : ITranslate
     {
         private readonly string _filePath;
-        // Наш кэш, хранящийся в файле, по неймингу игр
-        private Dictionary<string, string> _cache = new();
-       // Попробую Яндекс
+        private readonly Dictionary<string, string> _cache = new();
         private readonly YandexTranslator _translator = new();
         private readonly ILogger<TranslationService> _logger;
-
 
         public TranslationService(IHostEnvironment env, ILogger<TranslationService> logger)
         {
@@ -34,8 +31,17 @@ namespace DiscordCurlyBot.Services
 
             if (File.Exists(_filePath))
             {
-                var json = File.ReadAllText(_filePath);
-                _cache = JsonConvert.DeserializeObject<Dictionary<string, string>>(json) ?? new();
+                try
+                {
+                    var json = File.ReadAllText(_filePath);
+                    var loaded = JsonConvert.DeserializeObject<Dictionary<string, string>>(json);
+                    if (loaded != null)
+                        _cache = loaded;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "[TRANSLATE] Ошибка чтения activity_mapping.json, начинаем с пустого кэша");
+                }
             }
         }
 
@@ -46,15 +52,16 @@ namespace DiscordCurlyBot.Services
 
             try
             {
-                var result = await _translator.TranslateAsync(engName, "ru", "en");
+                var result = await _translator.TranslateAsync(engName, "en", "ru");
                 _cache[engName] = result.Translation;
 
                 await File.WriteAllTextAsync(_filePath, JsonConvert.SerializeObject(_cache, Formatting.Indented));
                 return result.Translation;
             }
-            catch
+            catch (Exception ex)
             {
-                return engName; // Если перевод упал, возвращаем как есть
+                _logger.LogError(ex, "[TRANSLATE] Ошибка перевода активности {Eng}", engName);
+                return engName;
             }
         }
     }

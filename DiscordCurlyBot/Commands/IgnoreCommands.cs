@@ -16,7 +16,7 @@ public class IgnoreCommands : InteractionModuleBase<SocketInteractionContext>
     [SlashCommand("ignore", "Отключает авто-перемещения для текущего пользователя или указанного (только для админов).")]
     public async Task IgnoreAsync(SocketGuildUser? target = null)
     {
-        var caller = Context.User as SocketGuildUser;
+        var caller = Context.User as SocketGuildUser ?? throw new Exception("[IGNORE] Не удалось определить отправителя"); 
         var user = target ?? caller;
 
         // Проверка прав: если указан чужой пользователь, то только админ может
@@ -48,7 +48,7 @@ public class IgnoreCommands : InteractionModuleBase<SocketInteractionContext>
     [SlashCommand("unignore", "Включает авто-перемещения для текущего пользователя или указанного (только для админов).")]
     public async Task UnignoreAsync(SocketGuildUser? target = null)
     {
-        var caller = Context.User as SocketGuildUser;
+        SocketGuildUser caller = Context.User as SocketGuildUser ?? throw new Exception("[UNIGNORE] Не удалось определить отправителя");
         var user = target ?? caller;
 
         if (target != null && !caller.GuildPermissions.Administrator)
@@ -66,7 +66,7 @@ public class IgnoreCommands : InteractionModuleBase<SocketInteractionContext>
             {
                 await user.SendMessageAsync(
                     $"Администратор {caller.DisplayName}({caller.Username}) сервера {caller.Guild.Name} исключил Вас из списка игнорирования бота по перемещениям.");
-                _logger.LogInformation($"[Unignore] {caller.DisplayName}({caller.Username}) включил отслеживание для {user.DisplayName}({user.Username}) на сервере {caller.Guild.Name}");
+                _logger.LogInformation($"[Unignore] {caller.DisplayName}({caller.Username}) выключил отслеживание для {user.DisplayName}({user.Username}) на сервере {caller.Guild.Name}");
             }
             catch
             {
