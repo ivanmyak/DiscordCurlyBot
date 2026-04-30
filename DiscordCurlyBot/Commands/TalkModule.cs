@@ -1,6 +1,8 @@
 ﻿using Discord.Interactions;
 using Discord.WebSocket;
 using DiscordCurlyBot.Interfaces;
+using DiscordCurlyBot.Services;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -11,25 +13,34 @@ namespace DiscordCurlyBot.Commands
     {
         private readonly IVoiceQueue _voiceQueue;
         private readonly IVoiceTemplate _templates;
+        private readonly ILogger<LoggingService> _logger;
 
-        public TalkModule(IVoiceQueue voiceQueue, IVoiceTemplate templates)
+        public TalkModule(
+            IVoiceQueue voiceQueue,
+            IVoiceTemplate templates,
+            ILogger<LoggingService> logger)
         {
             _voiceQueue = voiceQueue;
             _templates = templates;
+            _logger = logger;
         }
 
         [SlashCommand("talk", "Озвучить текст голосом бота")]
-        public async Task TalkAsync([Summary("text", "Текст для озвучки")] string text)
+        public async Task TalkAsync(
+            [Summary("text", "Текст для озвучки")] string text,
+            [Summary("user", "Пользователь, которому озвучить (необязательно)")] SocketGuildUser? targetUser = null)
         {
             // 1. Проверка текста
             if (string.IsNullOrWhiteSpace(text))
             {
+                _logger.LogInformation("[TALK] Пустой текст от {User} ({Id})", Context.User.Username, Context.User.Id);
                 await RespondAsync("Текст пустой.", ephemeral: true);
                 return;
             }
 
             if (text.Length > 300)
             {
+                _logger.LogInformation("[TALK] Слишком длинный текст ({Len}) от {User} ({Id})", text.Length, Context.User.Username, Context.User.Id);
                 await RespondAsync("Текст слишком длинный (максимум 300 символов).", ephemeral: true);
                 return;
             }
@@ -40,8 +51,9 @@ namespace DiscordCurlyBot.Commands
             // 3. Если команда вызвана в ЛИЧКЕ
             if (Context.Guild == null)
             {
-                // В личке пользователь НЕ может быть в голосовом канале
-                // Поэтому сразу отправляем TTS-файл в DM
+                _logger.LogInformation("[TALK] Команда вызвана в DM. User={User} ({Id}), Text=\"{Text}\"",
+                    Context.User.Username, Context.User.Id, text);
+
                 await _voiceQueue.EnqueueDirectMessageAsync(Context.User, formatted);
 
                 await RespondAsync(
@@ -51,41 +63,80 @@ namespace DiscordCurlyBot.Commands
                 return;
             }
 
-            // 4. Команда вызвана на сервере → пытаемся получить SocketGuildUser
-            var gUser = Context.User as SocketGuildUser;
-            if (gUser == null)
+            // 4. Команда вызвана на сервере → определяем вызывающего
+            var caller = Context.User as SocketGuildUser;
+            if (caller == null)
             {
+                _logger.LogWarning("[TALK] Не удалось привести Context.User к SocketGuildUser. UserId={Id}", Context.User.Id);
                 await RespondAsync("Не удалось определить пользователя.", ephemeral: true);
                 return;
             }
 
-            // 5. Если пользователь находится в голосовом канале → озвучиваем там
-            if (gUser.VoiceChannel != null)
-            {
-                await _voiceQueue.EnqueueDirectMessageAsync(gUser, formatted);
+            // 5. Определяем целевого пользователя (target)
+            var target = targetUser ?? caller;
 
-                await RespondAsync(
-                    "Добавлено в очередь озвучки в вашем голосовом канале.",
-                    ephemeral: true
-                );
+            _logger.LogInformation("[TALK] Вызов /talk. Caller={CallerName}({CallerId}), Target={TargetName}({TargetId}), Text=\"{Text}\"",
+                caller.DisplayName, caller.Id,
+                target.DisplayName, target.Id,
+                text);
+
+            // 6. Если target в голосовом канале → озвучиваем там
+            if (target.VoiceChannel != null)
+            {
+                _logger.LogInformation("[TALK] Target в голосовом канале {Channel} (Guild {GuildId})",
+                    target.VoiceChannel.Name, target.Guild.Id);
+
+                await _voiceQueue.EnqueueDirectMessageAsync(target, formatted);
+
+                if (targetUser == null)
+                {
+                    await RespondAsync(
+                        "Добавлено в очередь озвучки в вашем голосовом канале.",
+                        ephemeral: true
+                    );
+                }
+                else
+                {
+                    await RespondAsync(
+                        $"Добавлено в очередь озвучки в голосовом канале пользователя **{target.DisplayName}**.",
+                        ephemeral: true
+                    );
+                }
+
                 return;
             }
 
-            // 6. Пользователь НЕ в голосовом канале → пробуем отправить TTS в личку
+            // 7. Target НЕ в голосовом канале → пробуем отправить TTS в личку
+            _logger.LogInformation("[TALK] Target не в голосовом канале. Пытаемся отправить DM. Target={TargetName}({TargetId})",
+                target.DisplayName, target.Id);
+
             try
             {
-                await _voiceQueue.EnqueueDirectMessageAsync(gUser, formatted);
+                await _voiceQueue.EnqueueDirectMessageAsync(target, formatted);
+
+                if (targetUser == null)
+                {
+                    await RespondAsync(
+                        "Вы не в голосовом канале. Озвучка будет отправлена вам в личные сообщения.",
+                        ephemeral: true
+                    );
+                }
+                else
+                {
+                    await RespondAsync(
+                        $"Пользователь **{target.DisplayName}** не в голосовом канале. Озвучка отправлена ему в личные сообщения.",
+                        ephemeral: true
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "[TALK] Не удалось отправить DM озвучку. Target={TargetName}({TargetId})",
+                    target.DisplayName, target.Id);
 
                 await RespondAsync(
-                    "Вы не в голосовом канале. Озвучка будет отправлена вам в личные сообщения.",
-                    ephemeral: true
-                );
-            }
-            catch
-            {
-                // 7. Если личка закрыта → сообщаем об ошибке
-                await RespondAsync(
-                    "Не удалось воспроизвести ваше сообщение: вы не находитесь ни в одном голосовом канале, а личные сообщения недоступны.",
+                    "Не удалось воспроизвести сообщение: пользователь не в голосовом канале, а личные сообщения недоступны.",
                     ephemeral: true
                 );
             }
