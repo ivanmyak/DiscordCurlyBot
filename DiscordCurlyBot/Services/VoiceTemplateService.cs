@@ -8,32 +8,38 @@ namespace DiscordCurlyBot.Services
 {
     internal class VoiceTemplateService : IVoiceTemplate
     {
-        private readonly IConfiguration _config;
 
         private readonly string _single;
         private readonly string _singleWithActivity;
         private readonly string _group;
         private readonly string _talk;
 
+        private readonly string _talkNotifySender;
+        private readonly string _talkNotifyRecipient;
+
         public VoiceTemplateService(IConfiguration config)
         {
-            _config = config;
-
-            _single = _config["VoiceTemplates:SingleUser"]
+            _single = config["VoiceTemplates:SingleUser"]
                       ?? "Приветствуем {User}";
 
-            _singleWithActivity = _config["VoiceTemplates:SingleUserWithActivity"]
+            _singleWithActivity = config["VoiceTemplates:SingleUserWithActivity"]
                                   ?? "Приветствуем {User}, который сейчас играет в {Activity}";
 
-            _group = _config["VoiceTemplates:GroupUsers"]
+            _group = config["VoiceTemplates:GroupUsers"]
                      ?? "Приветствуем компанию: {Users}";
 
-            _talk = _config["VoiceTemplates:TalkCommand"]
+            _talk = config["VoiceTemplates:TalkCommand"]
                     ?? "{Text}";
+
+            _talkNotifySender = config["VoiceTemplates:TalkNotifySender"]
+                            ?? "Вы отправили игроку {Recipient} сообщение:";
+
+            _talkNotifyRecipient = config["VoiceTemplates:TalkNotifyRecipient"]
+                                   ?? "Игрок {Sender} сказал вам:";
         }
 
         public string FormatSingle(string user)
-            => _single.Replace("{User}", user);
+       => _single.Replace("{User}", user);
 
         public string FormatSingleWithActivity(string user, string activity)
             => _singleWithActivity
@@ -45,5 +51,11 @@ namespace DiscordCurlyBot.Services
 
         public string FormatTalk(string text)
             => _talk.Replace("{Text}", text);
+
+        public string FormatTalkNotifySender(string recipient)
+            => _talkNotifySender.Replace("{Recipient}", recipient);
+
+        public string FormatTalkNotifyRecipient(string sender)
+            => _talkNotifyRecipient.Replace("{Sender}", sender);
     }
 }

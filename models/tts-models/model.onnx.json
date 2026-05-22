@@ -11,7 +11,6 @@
     "length_scale": 1,
     "noise_w": 0.8
   },
-  "phoneme_type": "espeak",
   "phoneme_map": {},
   "phoneme_id_map": {
     "_": [
@@ -466,9 +465,6 @@
     ],
     "\"": [
       150
-    ],
-    "↑": [
-      151
     ]
   },
   "num_symbols": 256,
@@ -483,5 +479,5 @@
     "name_english": "Russian",
     "country_english": "Russia"
   },
-  "dataset": "denis"
+  "dataset": "irina"
 }

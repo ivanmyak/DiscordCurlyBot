@@ -40,13 +40,16 @@ namespace DiscordCurlyBot.Interfaces
         ///     Если пользователь находится в голосовом канале — озвучка будет
         ///     воспроизведена там. Если нет — TTS-файл будет отправлен в личку.
         /// </summary>
-        /// <param name="user">
+        /// <param name="sender">
         ///     Пользователь, инициировавший озвучку.
         ///     Используется для определения голосового канала или отправки DM.
         /// </param>
         /// <param name="text">
         ///     Текст, который нужно озвучить. Форматируется через шаблон TalkCommand.
         /// </param>
-        Task EnqueueDirectMessageAsync(SocketUser user, string text);
+        /// <param name="forceDM">По умолчанию - голосой канал, потом личка. Если True - сразу и только в личку</param>
+        /// <param name="recipient">кому отправляем</param>
+        Task EnqueueDirectMessageAsync(SocketUser sender, string text, bool forceDM = false,
+    SocketUser? recipient = null);
     }
 }

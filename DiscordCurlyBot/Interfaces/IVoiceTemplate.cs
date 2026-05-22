@@ -40,5 +40,19 @@ namespace DiscordCurlyBot.Interfaces
         /// </summary>
         /// <param name="text">Текст, который нужно озвучить.</param>
         string FormatTalk(string text);
+
+        /// <summary>
+        ///     Формирует фразу для отправки Назначению.
+        ///     Использует шаблон VoiceTemplates:TalkNotifySender.
+        /// </summary>
+        /// <param name="recipient">Имя пользователя назначения</param>
+        public string FormatTalkNotifySender(string recipient);
+
+        /// <summary>
+        ///     Формирует фразу для отправки Отправителю.
+        ///     Использует шаблон VoiceTemplates:TalkNotifyRecipient.
+        /// </summary>
+        /// <param name="sender">Имя пользователя-отправителя</param>
+        public string FormatTalkNotifyRecipient(string sender);
     }
 }
