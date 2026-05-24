@@ -49,11 +49,11 @@ namespace DiscordCurlyBot.Services
             if (!int.TryParse(DebounceDelayMillisecondsStr, out _delayBetweenMessagesMs) || _delayBetweenMessagesMs <= 0)
             {
                 _delayBetweenMessagesMs = 200;
-                _logger.LogWarning("[TALK] VoiceSettings:DebounceDelayMilliseconds отсутствует или некорректен. Используем значение по умолчанию: 200");
+                _logger.LogWarning("[VOICEINIT] VoiceSettings:DebounceDelayMilliseconds отсутствует или некорректен. Используем значение по умолчанию: 200");
             }
             else
             {
-                _logger.LogInformation("[TALK] MaxTextLength загружен из конфигурации: {Value}", _delayBetweenMessagesMs);
+                _logger.LogInformation("[VOICEINIT] MaxTextLength загружен из конфигурации: {Value}", _delayBetweenMessagesMs);
             }
 
             Task.Run(ProcessQueueAsync);
@@ -64,7 +64,7 @@ namespace DiscordCurlyBot.Services
         // ================================
         public async Task EnqueueJoinAsync(IVoiceChannel channel, string userName, string activity)
         {
-            _logger.LogInformation("[VOICE] EnqueueJoinAsync: channel={Channel}, user={User}, activity={Activity}",
+            _logger.LogInformation("[VOICEJOIN] EnqueueJoinAsync: channel={Channel}, user={User}, activity={Activity}",
                 channel.Name, userName, activity ?? "<null>");
 
             string text;
@@ -85,7 +85,7 @@ namespace DiscordCurlyBot.Services
                 Text = text
             });
 
-            _logger.LogInformation("[VOICE] В очередь добавлен Join: Channel={Channel}, Text=\"{Text}\"",
+            _logger.LogInformation("[VOICEJOIN] В очередь добавлен Join: Channel={Channel}, Text=\"{Text}\"",
                 channel.Name, text);
 
             _signal.Release();
@@ -95,13 +95,13 @@ namespace DiscordCurlyBot.Services
         //  /TALK и DM
         // ================================
         public async Task EnqueueDirectMessageAsync(
-            SocketUser sender,
-            string text,
-            bool forceDM = false,
-            SocketUser? recipient = null)
+    SocketUser sender,
+    string text,
+    bool forceDM = false,
+    SocketUser? recipient = null)
         {
             _logger.LogInformation(
-                "[VOICE] EnqueueDirectMessageAsync: sender={Sender}({SenderId}), recipient={Recipient}, forceDM={Force}, rawText=\"{Text}\"",
+                "[VOICEDMQUEUE] sender={Sender}({SenderId}), recipient={Recipient}, forceDM={Force}, rawText=\"{Text}\"",
                 sender.Username, sender.Id,
                 recipient?.Username ?? "<null>",
                 forceDM,
@@ -112,27 +112,68 @@ namespace DiscordCurlyBot.Services
 
             // Если recipient не указан — отправляем самому себе
             recipient ??= sender;
+            bool isSelf = recipient.Id == sender.Id;
 
-            //
-            // === 1. Задача для ПОЛУЧАТЕЛЯ ===
-            //
+            // === 1. Попытка в голосовой канал (если не forceDM) ===
+            SocketGuildUser? recipientGuildUser = recipient as SocketGuildUser;
+            if (!forceDM && recipientGuildUser?.VoiceChannel != null)
+            {
+                // Озвучка в голосовом канале
+                _queue.Enqueue(new VoiceQueueItem
+                {
+                    Channel = recipientGuildUser.VoiceChannel,
+                    Text = formatted,
+                    Sender = sender,
+                    Recipient = recipient
+                });
+
+                // DM отправителю (копия) — даже если он тот же самый, текст будет «самому себе»
+                _queue.Enqueue(new VoiceQueueItem
+                {
+                    DmUser = sender,
+                    Text = formatted,
+                    ForceDM = true,
+                    Sender = sender,
+                    Recipient = recipient
+                });
+
+                _signal.Release(2);
+                return;
+            }
+
+            // === 2. Режим DM (forceDM или нет голосового канала) ===
+
+            if (isSelf)
+            {
+                // Один DM: «Вы отправили самому себе:»
+                _queue.Enqueue(new VoiceQueueItem
+                {
+                    DmUser = sender,
+                    Text = formatted,
+                    ForceDM = true,
+                    Sender = sender,
+                    Recipient = recipient
+                });
+
+                _signal.Release(1);
+                return;
+            }
+
+            // Не self → два DM: получателю и отправителю
             _queue.Enqueue(new VoiceQueueItem
             {
                 DmUser = recipient,
                 Text = formatted,
-                ForceDM = forceDM,
+                ForceDM = true,
                 Sender = sender,
                 Recipient = recipient
             });
 
-            //
-            // === 2. Задача для ОТПРАВИТЕЛЯ ===
-            //
             _queue.Enqueue(new VoiceQueueItem
             {
                 DmUser = sender,
                 Text = formatted,
-                ForceDM = true, // отправителю ВСЕГДА DM
+                ForceDM = true,
                 Sender = sender,
                 Recipient = recipient
             });
@@ -140,12 +181,13 @@ namespace DiscordCurlyBot.Services
             _signal.Release(2);
         }
 
+
         // ================================
         //  ОСНОВНОЙ ОБРАБОТЧИК ОЧЕРЕДИ
         // ================================
         private async Task ProcessQueueAsync()
         {
-            _logger.LogInformation("[VOICE] Обработчик очереди запущен");
+            _logger.LogInformation("[VOICEPROCQUEUE] Обработчик очереди запущен");
 
             while (true)
             {
@@ -155,7 +197,7 @@ namespace DiscordCurlyBot.Services
                     continue;
 
                 _logger.LogInformation(
-                    "[VOICE] Извлечена задача: Text=\"{Text}\", Channel={Channel}, DM={Dm}, ForceDM={ForceDM}, Sender={Sender}, Recipient={Recipient}",
+                    "[VOICEPROCQUEUE] Извлечена задача: Text=\"{Text}\", Channel={Channel}, DM={Dm}, ForceDM={ForceDM}, Sender={Sender}, Recipient={Recipient}",
                     item.Text,
                     item.Channel?.Name ?? "<null>",
                     item.DmUser?.Username ?? "<null>",
@@ -168,7 +210,7 @@ namespace DiscordCurlyBot.Services
                 {
                     if (string.IsNullOrWhiteSpace(item.Text))
                     {
-                        _logger.LogInformation("[VOICE] Пустой текст в задаче — пропускаем");
+                        _logger.LogInformation("[VOICEPROCQUEUE] Пустой текст в задаче — пропускаем");
                         continue;
                     }
 
@@ -189,14 +231,14 @@ namespace DiscordCurlyBot.Services
                     // 3. Нет ни канала, ни DM — мусорная задача
                     if (item.Channel == null)
                     {
-                        _logger.LogWarning("[VOICE] Задача без канала и без DM-пользователя — пропускаем");
+                        _logger.LogWarning("[VOICEPROCQUEUE] Задача без канала и без DM-пользователя — пропускаем");
                         continue;
                     }
 
                     // 4. Проверяем, есть ли живые пользователи в канале
                     if (!ChannelHasRealUsers(item.Channel))
                     {
-                        _logger.LogInformation("[VOICE] Канал {Channel} пуст, пропускаем: {Text}",
+                        _logger.LogInformation("[VOICEPROCQUEUE] Канал {Channel} пуст, пропускаем: {Text}",
                             item.Channel.Name, item.Text);
                         continue;
                     }
@@ -208,24 +250,24 @@ namespace DiscordCurlyBot.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "[VOICE] Ошибка при обработке очереди");
+                    _logger.LogError(ex, "[VOICEPROCQUEUE] Ошибка при обработке очереди");
                 }
 
                 // 6. Если очередь пуста — закрываем все подключения
                 if (_queue.IsEmpty)
                 {
-                    _logger.LogInformation("[VOICE] Очередь пуста — закрываем все голосовые подключения");
+                    _logger.LogInformation("[VOICEPROCQUEUE] Очередь пуста — закрываем все голосовые подключения");
 
                     foreach (var kv in _connections)
                     {
                         try
                         {
-                            _logger.LogInformation("[VOICE] Отключаемся от GuildId={GuildId}", kv.Key);
+                            _logger.LogInformation("[VOICEPROCQUEUE] Отключаемся от GuildId={GuildId}", kv.Key);
                             await kv.Value.Client.StopAsync();
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogWarning(ex, "[VOICE] Ошибка при отключении от GuildId={GuildId}", kv.Key);
+                            _logger.LogWarning(ex, "[VOICEPROCQUEUE] Ошибка при отключении от GuildId={GuildId}", kv.Key);
                         }
 
                         _connections.TryRemove(kv.Key, out _);
@@ -239,26 +281,41 @@ namespace DiscordCurlyBot.Services
         // ================================
         private async Task HandleDmItemAsync(VoiceQueueItem item)
         {
-            _logger.LogInformation("[HANDLEMESSAGE] : отправляем DM пользователю {User}", item.DmUser.Username);
+            _logger.LogInformation("[VOICEDMHANDLER] DM → {User}", item.DmUser.Username);
 
             string path = await _tts.GenerateFileAsync(item.Text);
 
             try
             {
-                // === DM отправителю ===
-                if (item.Sender != null && item.DmUser.Id == item.Sender.Id)
+                bool isSelf = item.Sender != null &&
+                              item.Recipient != null &&
+                              item.Sender.Id == item.Recipient.Id &&
+                              item.DmUser.Id == item.Sender.Id;
+
+                // === SELF ===
+                if (isSelf)
                 {
-                    var msg = _templates.FormatTalkNotifySender(item.Recipient.Username);
-                    await item.DmUser.SendMessageAsync(msg);
+                    await item.DmUser.SendMessageAsync(_templates.FormatTalkNotifySelf());
+                    await item.DmUser.SendFileAsync(path);
+                    return;
+                }
+
+                // === DM отправителю ===
+                if (item.DmUser.Id == item.Sender?.Id && item.Recipient != null)
+                {
+                    await item.DmUser.SendMessageAsync(
+                        _templates.FormatTalkNotifySender(item.Recipient)
+                    );
                     await item.DmUser.SendFileAsync(path);
                     return;
                 }
 
                 // === DM получателю ===
-                if (item.Recipient != null && item.DmUser.Id == item.Recipient.Id)
+                if (item.DmUser.Id == item.Recipient?.Id && item.Sender != null)
                 {
-                    var msg = _templates.FormatTalkNotifyRecipient(item.Sender.Username);
-                    await item.DmUser.SendMessageAsync(msg);
+                    await item.DmUser.SendMessageAsync(
+                        _templates.FormatTalkNotifyRecipient(item.Sender)
+                    );
                     await item.DmUser.SendFileAsync(path);
                     return;
                 }
@@ -268,7 +325,7 @@ namespace DiscordCurlyBot.Services
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "[HANDLEMESSAGE] Ошибка отправки DM пользователю {User}", item.DmUser.Username);
+                _logger.LogWarning(ex, "[VOICEDMHANDLER] Ошибка отправки DM пользователю {User}", item.DmUser.Username);
 
                 try
                 {
@@ -276,10 +333,11 @@ namespace DiscordCurlyBot.Services
                 }
                 catch (Exception ex2)
                 {
-                    _logger.LogWarning(ex2, "[HANDLEMESSAGE] Не удалось отправить текстовое сообщение об ошибке пользователю {User}", item.DmUser.Username);
+                    _logger.LogWarning(ex2, "[VOICEDMHANDLER] Ошибка отправки fallback‑сообщения");
                 }
             }
         }
+
 
         // ================================
         //  ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ
@@ -290,7 +348,7 @@ namespace DiscordCurlyBot.Services
                 return true;
 
             var has = vc.Users.Any(u => !u.IsBot);
-            _logger.LogInformation("[VOICE] ChannelHasRealUsers: Channel={Channel}, HasRealUsers={Has}",
+            _logger.LogInformation("[VOICECHANNELNONEMPTY] ChannelHasRealUsers: Channel={Channel}, HasRealUsers={Has}",
                 vc.Name, has);
             return has;
         }

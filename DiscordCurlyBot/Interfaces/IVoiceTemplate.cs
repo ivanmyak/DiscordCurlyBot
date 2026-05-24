@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Discord.WebSocket;
+using System;
 using System.Collections.Generic;
 using System.Text;
 
@@ -45,14 +46,20 @@ namespace DiscordCurlyBot.Interfaces
         ///     Формирует фразу для отправки Назначению.
         ///     Использует шаблон VoiceTemplates:TalkNotifySender.
         /// </summary>
-        /// <param name="recipient">Имя пользователя назначения</param>
-        public string FormatTalkNotifySender(string recipient);
+        /// <param name="recipient">Пользователь назначения</param>
+        public string FormatTalkNotifySender(SocketUser recipient);
 
         /// <summary>
         ///     Формирует фразу для отправки Отправителю.
         ///     Использует шаблон VoiceTemplates:TalkNotifyRecipient.
         /// </summary>
-        /// <param name="sender">Имя пользователя-отправителя</param>
-        public string FormatTalkNotifyRecipient(string sender);
+        /// <param name="sender">Пользователь отправитель</param>
+        public string FormatTalkNotifyRecipient(SocketUser sender);
+
+        /// <summary>
+        ///     Формирует фразу для отправки самому себе.
+        ///     Использует шаблон VoiceTemplates:TalkNotifySelf.
+        /// </summary>
+        public string FormatTalkNotifySelf();
     }
 }
