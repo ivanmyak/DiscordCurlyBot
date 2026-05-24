@@ -72,7 +72,7 @@ namespace DiscordCurlyBot.Services
             string display = (recipient as SocketGuildUser)?.DisplayName ?? recipient.Username;
 
             return _notifySender
-                .Replace("{Recipient}", $"{mention} ({display})");
+                .Replace("{Recipient}", $"{display} ({mention})");
         }
 
         public string FormatTalkNotifyRecipient(SocketUser sender)
@@ -82,7 +82,7 @@ namespace DiscordCurlyBot.Services
             string display = (sender as SocketGuildUser)?.DisplayName ?? sender.Username;
 
             return _notifyRecipient
-                .Replace("{Sender}", $"{mention} ({display})");
+                .Replace("{Sender}", $"{display} ({mention})");
         }
     }
 }
