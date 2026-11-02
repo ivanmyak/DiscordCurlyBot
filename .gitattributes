@@ -61,3 +61,15 @@
 #*.PDF   diff=astextplain
 #*.rtf   diff=astextplain
 #*.RTF   diff=astextplain
+models export-ignore
+Data export-ignore
+
+*.wav export-ignore
+*.mp3 export-ignore
+
+*.onnx export-ignore
+*.onnx.json export-ignore
+
+docker-compose.override.yml export-ignore
+.env export-ignore
+env.env export-ignore
